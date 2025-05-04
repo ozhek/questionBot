@@ -27,7 +27,6 @@ qaBot
 ├── pkg
 │   └── config
 │       ├── config.go         # Configuration structure and access methods
-│       └── loader.go         # Logic for loading configuration files
 ├── go.mod                     # Module definition and dependencies
 ├── go.sum                     # Checksums for module dependencies
 └── README.md                  # Project documentation
