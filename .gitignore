@@ -1,0 +1,6 @@
+# Ignore everything in the config directory except config_example.yml
+config/*
+!config/config_example.yml
+
+# Ignore Visual Studio Code settings
+.vscode/
