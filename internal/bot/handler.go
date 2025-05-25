@@ -2,6 +2,8 @@ package bot
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -30,22 +32,21 @@ type Question struct {
 	SubQuestions []Question `json:"sub_questions,omitempty"`
 }
 
+type PendingQuestionData struct {
+	ParentID int
+	Lang     string
+	EditID   *int // nil if adding
+}
+
 func (b *Bot) GetStart(ctx context.Context, tbot *tgbot.Bot, update *models.Update) {
 	if update.Message == nil {
 		return
 	}
 
-	userID := update.Message.From.ID
 	commands := []string{
 		"/start - Show this help message",
 		"/questions - List available questions",
-	}
-
-	if adminIDs[userID] {
-		commands = append(commands,
-			"/createquestion - Create a new question",
-			"/addsubquestion - Add a subquestion to a question",
-		)
+		"/language - Set language",
 	}
 
 	msg := "Available commands:\n" + strings.Join(commands, "\n")
@@ -61,8 +62,10 @@ func (b *Bot) GetQuestions(ctx context.Context, tbot *tgbot.Bot, update *models.
 		return
 	}
 
+	isAdmin := adminIDs[update.Message.From.ID]
+
 	questions, err := b.getQuestionsByUserID(ctx, update.Message.From.ID)
-	if err != nil || len(questions) == 0 {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "No questions available.",
@@ -70,7 +73,7 @@ func (b *Bot) GetQuestions(ctx context.Context, tbot *tgbot.Bot, update *models.
 		return
 	}
 
-	keyboard := b.buildQuestionKeyboard(questions, 0, 0, pageSize)
+	keyboard := b.buildQuestionKeyboard(questions, 0, 0, pageSize, isAdmin)
 
 	tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID:      update.Message.Chat.ID,
@@ -93,7 +96,7 @@ func (b *Bot) getQuestionsByUserID(ctx context.Context, userID int64) ([]Questio
 
 }
 
-func (b *Bot) buildQuestionKeyboard(questions []Question, parentID, page, pageSize int) *models.InlineKeyboardMarkup {
+func (b *Bot) buildQuestionKeyboard(questions []Question, parentID, page, pageSize int, isAdmin bool) *models.InlineKeyboardMarkup {
 	var rows [][]models.InlineKeyboardButton
 
 	// Фильтруем по родителю
@@ -119,6 +122,19 @@ func (b *Bot) buildQuestionKeyboard(questions []Question, parentID, page, pageSi
 				CallbackData: fmt.Sprintf("q_%d", q.ID),
 			},
 		})
+		if isAdmin {
+			rows = append(rows,
+				[]models.InlineKeyboardButton{
+					{
+						Text:         "✏️",
+						CallbackData: fmt.Sprintf("edit_%d", q.ID),
+					},
+					{
+						Text:         "🗑️",
+						CallbackData: fmt.Sprintf("del_%d", q.ID),
+					},
+				})
+		}
 	}
 
 	// Пагинация
@@ -149,6 +165,16 @@ func (b *Bot) buildQuestionKeyboard(questions []Question, parentID, page, pageSi
 		})
 	}
 
+	// Add "Add Question" button for admins at the root level
+	if isAdmin {
+		rows = append(rows, []models.InlineKeyboardButton{
+			{
+				Text:         "➕ Add Question",
+				CallbackData: fmt.Sprintf("add_question_%d", parentID),
+			},
+		})
+	}
+
 	return &models.InlineKeyboardMarkup{
 		InlineKeyboard: rows,
 	}
@@ -158,6 +184,8 @@ func (b *Bot) HandleQuestionCallback(ctx context.Context, tbot *tgbot.Bot, updat
 	if update.CallbackQuery == nil {
 		return
 	}
+
+	isAdmin := adminIDs[update.CallbackQuery.From.ID]
 
 	data := update.CallbackQuery.Data
 
@@ -171,7 +199,7 @@ func (b *Bot) HandleQuestionCallback(ctx context.Context, tbot *tgbot.Bot, updat
 		return
 	}
 
-	keyboard := b.buildQuestionKeyboard(q.SubQuestions, q.ID, 0, 5)
+	keyboard := b.buildQuestionKeyboard(q.SubQuestions, q.ID, 0, pageSize, isAdmin)
 
 	tbot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
@@ -186,6 +214,9 @@ func (b *Bot) HandleQuestionPageCallback(ctx context.Context, tbot *tgbot.Bot, u
 	if update.CallbackQuery == nil {
 		return
 	}
+	userID := update.CallbackQuery.From.ID
+	isAdmin := adminIDs[userID]
+
 	data := update.CallbackQuery.Data
 
 	parts := strings.Split(data, "_")
@@ -195,12 +226,20 @@ func (b *Bot) HandleQuestionPageCallback(ctx context.Context, tbot *tgbot.Bot, u
 	parentID, _ := strconv.Atoi(parts[1])
 	page, _ := strconv.Atoi(parts[2])
 
-	parentQ, err := b.repository.GetQuestionByID(parentID)
+	questions, err := b.getQuestionsByUserID(ctx, userID)
 	if err != nil {
 		return
 	}
 
-	keyboard := b.buildQuestionKeyboard(parentQ.SubQuestions, parentID, page, 5)
+	if parentID != 0 {
+		parentQ, err := b.repository.GetQuestionByID(parentID)
+		if err != nil {
+			return
+		}
+		questions = parentQ.SubQuestions
+	}
+
+	keyboard := b.buildQuestionKeyboard(questions, parentID, page, pageSize, isAdmin)
 
 	tbot.EditMessageReplyMarkup(ctx, &tgbot.EditMessageReplyMarkupParams{
 		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
@@ -213,11 +252,8 @@ func (b *Bot) HandleQuestionBackCallback(ctx context.Context, tbot *tgbot.Bot, u
 	if update.CallbackQuery == nil {
 		return
 	}
+	isAdmin := adminIDs[update.CallbackQuery.From.ID]
 	data := update.CallbackQuery.Data
-
-	fmt.Println("-------------")
-	fmt.Println(data)
-	fmt.Println("-------------")
 
 	childID, _ := strconv.Atoi(strings.TrimPrefix(data, "back_"))
 	if childID == 0 {
@@ -229,16 +265,12 @@ func (b *Bot) HandleQuestionBackCallback(ctx context.Context, tbot *tgbot.Bot, u
 		return
 	}
 
-	fmt.Println("-------current------")
-	fmt.Println(currentQ)
-	fmt.Println("-------------")
-
 	if currentQ.ParentID == 0 {
 		questions, err := b.getQuestionsByUserID(ctx, update.CallbackQuery.From.ID)
 		if err != nil {
 			return
 		}
-		keyboard := b.buildQuestionKeyboard(questions, 0, 0, pageSize)
+		keyboard := b.buildQuestionKeyboard(questions, 0, 0, pageSize, isAdmin)
 		tbot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 			ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
 			MessageID:   update.CallbackQuery.Message.Message.ID,
@@ -254,11 +286,7 @@ func (b *Bot) HandleQuestionBackCallback(ctx context.Context, tbot *tgbot.Bot, u
 		return
 	}
 
-	fmt.Println("-------parent------")
-	fmt.Println(parentQ)
-	fmt.Println("-------------")
-
-	keyboard := b.buildQuestionKeyboard(parentQ.SubQuestions, parentQ.ID, 0, pageSize)
+	keyboard := b.buildQuestionKeyboard(parentQ.SubQuestions, parentQ.ID, 0, pageSize, isAdmin)
 
 	tbot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
 		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
@@ -295,6 +323,7 @@ func (b *Bot) HandleLanguageSelection(ctx context.Context, tbot *tgbot.Bot, upda
 	if update.Message == nil {
 		return
 	}
+
 	userID := update.Message.From.ID
 	var lang string
 	switch update.Message.Text {
@@ -305,6 +334,7 @@ func (b *Bot) HandleLanguageSelection(ctx context.Context, tbot *tgbot.Bot, upda
 	default:
 		return
 	}
+
 	if err := b.repository.SetUserLang(userID, lang); err == nil {
 		msg := map[string]string{
 			"en": "Language set to English.",
@@ -315,4 +345,157 @@ func (b *Bot) HandleLanguageSelection(ctx context.Context, tbot *tgbot.Bot, upda
 			Text:   msg[lang],
 		})
 	}
+}
+
+func (b *Bot) HandleAddQuestion(ctx context.Context, tbot *tgbot.Bot, update *models.Update) {
+	if update.CallbackQuery == nil {
+		return
+	}
+
+	userID := update.CallbackQuery.From.ID
+	if !adminIDs[userID] {
+		return
+	}
+
+	data := update.CallbackQuery.Data
+	parentID, _ := strconv.Atoi(strings.TrimPrefix(data, "add_question_"))
+
+	lang, err := b.repository.GetUserLang(userID)
+	if err != nil || lang == "" {
+		lang = "en"
+	}
+
+	b.pendingMutex.Lock()
+	b.pendingQuestionEdits[userID] = &PendingQuestionData{
+		ParentID: parentID,
+		Lang:     lang,
+		EditID:   nil,
+	}
+	b.pendingMutex.Unlock()
+
+	tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: update.CallbackQuery.Message.Message.Chat.ID,
+		Text:   fmt.Sprintf("Send your new question for language [%s] and parent [%d] in the format:\n\nquestion|answer", lang, parentID),
+	})
+}
+
+func (b *Bot) HandleEditQuestion(ctx context.Context, tbot *tgbot.Bot, update *models.Update) {
+	if update.CallbackQuery == nil {
+		return
+	}
+
+	userID := update.CallbackQuery.From.ID
+	if !adminIDs[userID] {
+		return
+	}
+
+	data := update.CallbackQuery.Data
+	id, err := strconv.Atoi(strings.TrimPrefix(data, "edit_"))
+	if err != nil {
+		return
+	}
+
+	b.pendingMutex.Lock()
+	b.pendingQuestionEdits[userID] = &PendingQuestionData{
+		EditID: &id,
+	}
+	b.pendingMutex.Unlock()
+
+	tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: update.CallbackQuery.Message.Message.Chat.ID,
+		Text:   fmt.Sprintf("Send edited text for question #%d in format:\n\nquestion|answer", id),
+	})
+}
+
+func (b *Bot) HandleDeleteQuestion(ctx context.Context, tbot *tgbot.Bot, update *models.Update) {
+	if update.CallbackQuery == nil {
+		return
+	}
+
+	userID := update.CallbackQuery.From.ID
+	if !adminIDs[userID] {
+		return
+	}
+
+	data := update.CallbackQuery.Data
+	id, err := strconv.Atoi(strings.TrimPrefix(data, "del_"))
+	if err != nil {
+		return
+	}
+
+	err = b.repository.DeleteQuestionByID(id)
+	if err != nil {
+		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: update.CallbackQuery.Message.Message.Chat.ID,
+			Text:   "Failed to delete question.",
+		})
+		return
+	}
+
+	tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID: update.CallbackQuery.Message.Message.Chat.ID,
+		Text:   fmt.Sprintf("Question #%d deleted.", id),
+	})
+}
+
+// HandleMessageInput processes text input for adding or editing questions.
+func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *models.Update) {
+	if update.Message == nil {
+		return
+	}
+
+	userID := update.Message.From.ID
+
+	b.pendingMutex.RLock()
+	session, ok := b.pendingQuestionEdits[userID]
+	b.pendingMutex.RUnlock()
+	if !ok || update.Message.Text == "" {
+		return
+	}
+
+	parts := strings.SplitN(update.Message.Text, "|", 2)
+	if len(parts) != 2 {
+		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Invalid format. Use:\n\nquestion|answer",
+		})
+		return
+	}
+	questionText := strings.TrimSpace(parts[0])
+	answerText := strings.TrimSpace(parts[1])
+
+	if session.EditID != nil {
+		// Update existing question
+		err := b.repository.UpdateQuestion(*session.EditID, questionText, answerText)
+		if err != nil {
+			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "Failed to update question.",
+			})
+			return
+		}
+		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Question updated successfully.",
+		})
+	} else {
+		// Create new question
+		err := b.repository.CreateQuestion(session.Lang, questionText, answerText, session.ParentID)
+		if err != nil {
+			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "Failed to create question.",
+			})
+			return
+		}
+		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+			ChatID: update.Message.Chat.ID,
+			Text:   "Question created successfully.",
+		})
+	}
+
+	// Clear session
+	b.pendingMutex.Lock()
+	delete(b.pendingQuestionEdits, userID)
+	b.pendingMutex.Unlock()
 }

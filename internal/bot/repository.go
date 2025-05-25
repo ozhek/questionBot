@@ -2,6 +2,7 @@ package bot
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 )
 
@@ -103,4 +104,40 @@ func (r *Repository) GetQuestionByID(id int) (*Question, error) {
 	}
 
 	return &q, nil
+}
+
+func (r *Repository) DeleteQuestionByID(id int) error {
+	qs, err := r.GetSubQuestions(id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	for _, q := range qs {
+		r.DeleteQuestionByID(q.ID)
+	}
+
+	_, err = r.db.Exec("DELETE FROM questions WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CreateQuestion inserts a new question into the questions table.
+func (r *Repository) CreateQuestion(lang, text, answer string, parentID int) error {
+	_, err := r.db.Exec(
+		"INSERT INTO questions (lang, text, answer, parent_id) VALUES (?, ?, ?, ?)",
+		lang, text, answer, parentID,
+	)
+	return err
+}
+
+// UpdateQuestion updates the text and answer of a question by its ID.
+func (r *Repository) UpdateQuestion(id int, text, answer string) error {
+	_, err := r.db.Exec(
+		"UPDATE questions SET text = ?, answer = ? WHERE id = ?",
+		text, answer, id,
+	)
+	return err
 }

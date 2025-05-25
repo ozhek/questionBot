@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"sync"
 
 	tgbot "github.com/go-telegram/bot"
 )
@@ -19,6 +20,9 @@ var (
 type Bot struct {
 	api        *tgbot.Bot
 	repository *Repository
+
+	pendingQuestionEdits map[int64]*PendingQuestionData
+	pendingMutex         sync.RWMutex
 }
 
 // NewBot initializes a new Bot instance with the provided token and database.
@@ -34,7 +38,11 @@ func NewBot(token string, db *sql.DB) (*Bot, error) {
 
 	repo := NewRepository(db)
 
-	return &Bot{api: bot, repository: repo}, nil
+	return &Bot{
+		api:                  bot,
+		repository:           repo,
+		pendingQuestionEdits: make(map[int64]*PendingQuestionData),
+	}, nil
 }
 
 // Start begins listening for updates and initializes questions from the database.
@@ -84,6 +92,48 @@ func (b *Bot) Start(ctx context.Context) error {
 		"back_",
 		tgbot.MatchTypePrefix,
 		b.HandleQuestionBackCallback,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"add_question_",
+		tgbot.MatchTypePrefix,
+		b.HandleAddQuestion,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"edit_",
+		tgbot.MatchTypePrefix,
+		b.HandleEditQuestion,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"del_",
+		tgbot.MatchTypePrefix,
+		b.HandleDeleteQuestion,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"English",
+		tgbot.MatchTypeExact,
+		b.HandleLanguageSelection,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"Русский",
+		tgbot.MatchTypeExact,
+		b.HandleLanguageSelection,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"",
+		tgbot.MatchTypePrefix,
+		b.HandleMessageInput,
 	)
 
 	log.Println("Bot is starting")
