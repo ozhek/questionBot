@@ -1,29 +1,27 @@
-# Use the official Golang image as the base image
-FROM golang:1.22 AS builder
+# syntax=docker/dockerfile:1.4
 
-# Set the working directory inside the container
+# Use the official Golang image to build the application
+FROM --platform=$BUILDPLATFORM golang:1.22 as builder
+
+ARG TARGETOS
+ARG TARGETARCH
+
 WORKDIR /app
 
-# Copy go.mod and go.sum files
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy the rest of the application code
 COPY . .
 
-# Build the application as a statically linked binary
-RUN CGO_ENABLED=0 go build -o ./qaBot ./cmd/main.go
+# Build the Go app for Linux AMD64
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o qaBot ./cmd/main.go
 
-# Use scratch as the base image for the final container
+# Final minimal image
 FROM scratch
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the built binary from the builder stage
 COPY --from=builder /app/qaBot .
 
-# Command to run the application
-CMD ["/app/qaBot", "-config=test"]
+CMD ["/app/qaBot"]
