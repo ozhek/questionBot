@@ -1,35 +1,35 @@
 package main
 
 import (
-	"database/sql"
-	"log"
-
 	"context"
+	"log"
 	"qaBot/internal/bot"
+	"qaBot/internal/infrastructure/database"
 	"qaBot/pkg/config"
-
-	_ "github.com/mattn/go-sqlite3"
+	"time"
 )
 
 func main() {
 	// Retrieve configuration values
 	botToken := config.GetString("bot_token")
-	dbPath := config.GetString("database.connection_string")
 
-	// Open database connection
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+	pgCfg := database.PostgresConfig{
+		Host:            config.GetString("database.host"),
+		Port:            config.GetString("database.port"),
+		User:            config.GetString("database.user"),
+		Password:        config.GetString("database.password"),
+		DBName:          config.GetString("database.name"),
+		SSLMode:         config.GetString("database.sslmode"),
+		MaxConns:        int32(config.GetInt("database.max_conns")),
+		MinConns:        int32(config.GetInt("database.min_conns")),
+		MaxConnLifetime: time.Minute * time.Duration(config.GetInt("database.max_conn_lifetime_minutes")),
 	}
-	defer db.Close()
+	database.InitializePostgres(pgCfg)
 
-	// Verify database connection
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Database ping failed: %v", err)
-	}
+	repo := bot.NewRepository(database.GetPostgresDB())
 
 	// Initialize the bot with the database
-	botAPI, err := bot.NewBot(botToken, db)
+	botAPI, err := bot.NewBot(botToken, repo)
 	if err != nil {
 		log.Fatalf("Error initializing bot: %v", err)
 	}

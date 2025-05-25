@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 
@@ -85,12 +86,12 @@ func (b *Bot) GetQuestions(ctx context.Context, tbot *tgbot.Bot, update *models.
 }
 
 func (b *Bot) getQuestionsByUserID(ctx context.Context, userID int64) ([]Question, error) {
-	lang, err := b.repository.GetUserLang(userID)
+	lang, err := b.repository.GetUserLang(ctx, userID)
 	if err != nil || lang == "" {
 		lang = "en"
 	}
 
-	questions, err := b.repository.GetQuestionsByLang(lang)
+	questions, err := b.repository.GetQuestionsByLang(ctx, lang)
 	if err != nil {
 		return []Question{}, err
 	}
@@ -198,7 +199,7 @@ func (b *Bot) HandleQuestionCallback(ctx context.Context, tbot *tgbot.Bot, updat
 		return
 	}
 
-	q, err := b.repository.GetQuestionByID(id)
+	q, err := b.repository.GetQuestionByID(ctx, id)
 	if err != nil {
 		return
 	}
@@ -239,7 +240,7 @@ func (b *Bot) HandleQuestionPageCallback(ctx context.Context, tbot *tgbot.Bot, u
 	}
 
 	if parentID != 0 {
-		parentQ, err := b.repository.GetQuestionByID(parentID)
+		parentQ, err := b.repository.GetQuestionByID(ctx, parentID)
 		if err != nil {
 			return
 		}
@@ -270,7 +271,7 @@ func (b *Bot) HandleQuestionBackCallback(ctx context.Context, tbot *tgbot.Bot, u
 		return
 	}
 
-	currentQ, err := b.repository.GetQuestionByID(childID)
+	currentQ, err := b.repository.GetQuestionByID(ctx, childID)
 	if err != nil {
 		return
 	}
@@ -291,7 +292,7 @@ func (b *Bot) HandleQuestionBackCallback(ctx context.Context, tbot *tgbot.Bot, u
 		return
 	}
 
-	parentQ, err := b.repository.GetQuestionByID(currentQ.ParentID)
+	parentQ, err := b.repository.GetQuestionByID(ctx, currentQ.ParentID)
 	if err != nil {
 		return
 	}
@@ -345,7 +346,7 @@ func (b *Bot) HandleLanguageSelection(ctx context.Context, tbot *tgbot.Bot, upda
 		return
 	}
 
-	if err := b.repository.SetUserLang(userID, lang); err == nil {
+	if err := b.repository.SetUserLang(ctx, userID, lang); err == nil {
 		msg := map[string]string{
 			"en": "Language set to English.",
 			"ru": "Язык установлен на русский.",
@@ -372,7 +373,7 @@ func (b *Bot) HandleAddQuestion(ctx context.Context, tbot *tgbot.Bot, update *mo
 	data := update.CallbackQuery.Data
 	parentID, _ := strconv.Atoi(strings.TrimPrefix(data, "add_question_"))
 
-	lang, err := b.repository.GetUserLang(userID)
+	lang, err := b.repository.GetUserLang(ctx, userID)
 	if err != nil || lang == "" {
 		lang = "en"
 	}
@@ -439,7 +440,7 @@ func (b *Bot) HandleDeleteQuestion(ctx context.Context, tbot *tgbot.Bot, update 
 		return
 	}
 
-	err = b.repository.DeleteQuestionByID(id)
+	err = b.repository.DeleteQuestionByID(ctx, id)
 	if err != nil {
 		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: update.CallbackQuery.Message.Message.Chat.ID,
@@ -484,7 +485,7 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 
 	if session.EditID != nil {
 		// Update existing question
-		err := b.repository.UpdateQuestion(*session.EditID, questionText, answerText)
+		err := b.repository.UpdateQuestion(ctx, *session.EditID, questionText, answerText)
 		if err != nil {
 			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
@@ -498,12 +499,13 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 		})
 	} else {
 		// Create new question
-		err := b.repository.CreateQuestion(session.Lang, questionText, answerText, session.ParentID)
+		err := b.repository.CreateQuestion(ctx, session.Lang, questionText, answerText, session.ParentID)
 		if err != nil {
 			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
 				Text:   "Failed to create question.",
 			})
+			log.Println("failed to create question: ", err)
 			return
 		}
 		tbot.SendMessage(ctx, &tgbot.SendMessageParams{

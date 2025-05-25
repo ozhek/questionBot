@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"log"
 	"sync"
@@ -17,16 +16,27 @@ var (
 	ErrQuestionNotFound  = errors.New("question not found")
 )
 
+type BotRepository interface {
+	GetQuestionsByLang(ctx context.Context, lang string) ([]Question, error)
+	GetSubQuestions(ctx context.Context, parentID int) ([]Question, error)
+	GetQuestionByID(ctx context.Context, id int) (*Question, error)
+	SetUserLang(ctx context.Context, userID int64, lang string) error
+	GetUserLang(ctx context.Context, userID int64) (string, error)
+	CreateQuestion(ctx context.Context, lang, text, answer string, parentID int) error
+	UpdateQuestion(ctx context.Context, id int, text, answer string) error
+	DeleteQuestionByID(ctx context.Context, id int) error
+}
+
 type Bot struct {
 	api        *tgbot.Bot
-	repository *Repository
+	repository BotRepository
 
 	pendingQuestionEdits map[int64]*PendingQuestionData
 	pendingMutex         sync.RWMutex
 }
 
 // NewBot initializes a new Bot instance with the provided token and database.
-func NewBot(token string, db *sql.DB) (*Bot, error) {
+func NewBot(token string, repo BotRepository) (*Bot, error) {
 	if token == "" {
 		return nil, ErrEmptyToken
 	}
@@ -39,10 +49,6 @@ func NewBot(token string, db *sql.DB) (*Bot, error) {
 		return nil, err
 	}
 	log.Println("Telegram bot initialized successfully")
-
-	repo := NewRepository(db)
-
-	log.Println("Bot struct created with repository and pending question edits map")
 
 	return &Bot{
 		api:                  bot,
