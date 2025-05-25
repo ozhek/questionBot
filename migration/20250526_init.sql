@@ -1,6 +1,3 @@
-
-
-
 CREATE TABLE IF NOT EXISTS questions (
     id SERIAL PRIMARY KEY,
     lang TEXT NOT NULL,

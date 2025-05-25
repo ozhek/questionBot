@@ -24,6 +24,7 @@ func (r *Repository) GetQuestionsByLang(ctx context.Context, lang string) ([]Que
 	// Fetch top-level questions (parent_id is NULL)
 	rows, err := r.db.Query(ctx, "SELECT id, lang, text, answer, parent_id FROM questions WHERE lang = $1", lang)
 	if err != nil {
+		log.Println(err)
 		return nil, err
 	}
 	defer rows.Close()
