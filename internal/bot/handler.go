@@ -62,6 +62,8 @@ func (b *Bot) GetQuestions(ctx context.Context, tbot *tgbot.Bot, update *models.
 		return
 	}
 
+	fmt.Printf("GetQuestions called by user %d\n", update.Message.From.ID)
+
 	isAdmin := adminIDs[update.Message.From.ID]
 
 	questions, err := b.getQuestionsByUserID(ctx, update.Message.From.ID)
@@ -185,6 +187,8 @@ func (b *Bot) HandleQuestionCallback(ctx context.Context, tbot *tgbot.Bot, updat
 		return
 	}
 
+	fmt.Printf("HandleQuestionCallback received: %s from user %d\n", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+
 	isAdmin := adminIDs[update.CallbackQuery.From.ID]
 
 	data := update.CallbackQuery.Data
@@ -214,6 +218,9 @@ func (b *Bot) HandleQuestionPageCallback(ctx context.Context, tbot *tgbot.Bot, u
 	if update.CallbackQuery == nil {
 		return
 	}
+
+	fmt.Printf("HandleQuestionPageCallback received: %s from user %d\n", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+
 	userID := update.CallbackQuery.From.ID
 	isAdmin := adminIDs[userID]
 
@@ -252,6 +259,9 @@ func (b *Bot) HandleQuestionBackCallback(ctx context.Context, tbot *tgbot.Bot, u
 	if update.CallbackQuery == nil {
 		return
 	}
+
+	fmt.Printf("HandleQuestionBackCallback received: %s from user %d\n", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+
 	isAdmin := adminIDs[update.CallbackQuery.From.ID]
 	data := update.CallbackQuery.Data
 
@@ -352,6 +362,8 @@ func (b *Bot) HandleAddQuestion(ctx context.Context, tbot *tgbot.Bot, update *mo
 		return
 	}
 
+	fmt.Printf("HandleAddQuestion received: %s from user %d\n", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+
 	userID := update.CallbackQuery.From.ID
 	if !adminIDs[userID] {
 		return
@@ -384,6 +396,8 @@ func (b *Bot) HandleEditQuestion(ctx context.Context, tbot *tgbot.Bot, update *m
 		return
 	}
 
+	fmt.Printf("HandleEditQuestion received: %s from user %d\n", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
+
 	userID := update.CallbackQuery.From.ID
 	if !adminIDs[userID] {
 		return
@@ -411,6 +425,8 @@ func (b *Bot) HandleDeleteQuestion(ctx context.Context, tbot *tgbot.Bot, update 
 	if update.CallbackQuery == nil {
 		return
 	}
+
+	fmt.Printf("HandleDeleteQuestion received: %s from user %d\n", update.CallbackQuery.Data, update.CallbackQuery.From.ID)
 
 	userID := update.CallbackQuery.From.ID
 	if !adminIDs[userID] {
@@ -443,6 +459,8 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 	if update.Message == nil {
 		return
 	}
+
+	fmt.Printf("HandleMessageInput received from user %d: %s\n", update.Message.From.ID, update.Message.Text)
 
 	userID := update.Message.From.ID
 

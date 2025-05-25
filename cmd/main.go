@@ -23,6 +23,11 @@ func main() {
 	}
 	defer db.Close()
 
+	// Verify database connection
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Database ping failed: %v", err)
+	}
+
 	// Initialize the bot with the database
 	botAPI, err := bot.NewBot(botToken, db)
 	if err != nil {

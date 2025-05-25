@@ -31,12 +31,18 @@ func NewBot(token string, db *sql.DB) (*Bot, error) {
 		return nil, ErrEmptyToken
 	}
 
+	log.Println("Initializing bot with provided token...")
+
 	bot, err := tgbot.New(token)
 	if err != nil {
+		log.Printf("Failed to create new bot: %v\n", err)
 		return nil, err
 	}
+	log.Println("Telegram bot initialized successfully")
 
 	repo := NewRepository(db)
+
+	log.Println("Bot struct created with repository and pending question edits map")
 
 	return &Bot{
 		api:                  bot,
@@ -50,6 +56,8 @@ func (b *Bot) Start(ctx context.Context) error {
 	if b.api == nil {
 		return ErrBotNotInitialized
 	}
+
+	log.Println("Registering command and callback handlers...")
 
 	// Set up a handler for the /questions command
 	b.api.RegisterHandler(
@@ -136,7 +144,10 @@ func (b *Bot) Start(ctx context.Context) error {
 		b.HandleMessageInput,
 	)
 
+	log.Println("All handlers registered successfully")
+
 	log.Println("Bot is starting")
 	b.api.Start(ctx)
+	log.Println("Telegram bot API has started processing updates")
 	return nil
 }

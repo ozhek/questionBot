@@ -1,10 +1,15 @@
 # syntax=docker/dockerfile:1.4
 
-# Use the official Golang image to build the application
-FROM --platform=$BUILDPLATFORM golang:1.22 as builder
+# Build stage with CGO enabled and required dev libs
+FROM --platform=$BUILDPLATFORM debian:bullseye as builder
 
-ARG TARGETOS
-ARG TARGETARCH
+RUN apt-get update && \
+    apt-get install -y golang gcc libc6-dev libsqlite3-dev ca-certificates && \
+    update-ca-certificates
+
+ENV CGO_ENABLED=1
+ENV GOOS=linux
+ENV GOARCH=amd64
 
 WORKDIR /app
 
@@ -13,15 +18,15 @@ RUN go mod download
 
 COPY . .
 
-# Build the Go app for Linux AMD64
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o qaBot ./cmd/main.go
+    go build -o qaBot ./cmd/main.go
 
 # Final minimal image
 FROM scratch
 
 WORKDIR /app
 
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/qaBot .
 
 CMD ["/app/qaBot"]
