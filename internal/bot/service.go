@@ -19,7 +19,6 @@ var (
 type Bot struct {
 	api        *tgbot.Bot
 	repository *Repository
-	questions  []Question
 }
 
 // NewBot initializes a new Bot instance with the provided token and database.
@@ -38,44 +37,56 @@ func NewBot(token string, db *sql.DB) (*Bot, error) {
 	return &Bot{api: bot, repository: repo}, nil
 }
 
-// InitQuestions initializes the bot's questions from the database.
-func (b *Bot) InitQuestions() error {
-	if b.repository == nil {
-		return errors.New("repository is not initialized")
-	}
-
-	questions, err := b.repository.GetQuestions()
-	if err != nil {
-		return err
-	}
-
-	b.questions = questions
-	return nil
-}
-
 // Start begins listening for updates and initializes questions from the database.
 func (b *Bot) Start(ctx context.Context) error {
 	if b.api == nil {
 		return ErrBotNotInitialized
 	}
 
-	// Initialize questions from the database
-	if err := b.InitQuestions(); err != nil {
-		return err
-	}
-
-	log.Println("Questions initialized from the database.")
-
-	// Set up a handler for the /getquestions command
+	// Set up a handler for the /questions command
 	b.api.RegisterHandler(
 		tgbot.HandlerTypeMessageText,
-		"/getquestions",
+		"/questions",
 		tgbot.MatchTypeExact,
 		b.GetQuestions,
 	)
 
-	log.Println("Bot started")
-	// Start polling for updates
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/start",
+		tgbot.MatchTypeExact,
+		b.GetStart,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeMessageText,
+		"/language",
+		tgbot.MatchTypeExact,
+		b.HandleLanguage,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"q_",
+		tgbot.MatchTypePrefix,
+		b.HandleQuestionCallback,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"p_",
+		tgbot.MatchTypePrefix,
+		b.HandleQuestionPageCallback,
+	)
+
+	b.api.RegisterHandler(
+		tgbot.HandlerTypeCallbackQueryData,
+		"back_",
+		tgbot.MatchTypePrefix,
+		b.HandleQuestionBackCallback,
+	)
+
+	log.Println("Bot is starting")
 	b.api.Start(ctx)
 	return nil
 }

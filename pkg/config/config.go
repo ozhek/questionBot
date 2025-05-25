@@ -26,7 +26,7 @@ func init() {
 		settings = config.New("default")
 		settings.AddDriver(yaml.Driver)
 
-		configPath := fmt.Sprintf("config/config_%s.yml", configFlag)
+		configPath := fmt.Sprintf("./config/config_%s.yml", configFlag)
 		if err := settings.LoadFiles(configPath); err != nil {
 			log.Printf("Failed to load config file: %v. Using default values.", err)
 		}

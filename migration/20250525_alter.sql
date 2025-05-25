@@ -1,0 +1,6 @@
+ALTER TABLE questions ADD COLUMN lang TEXT NOT NULL DEFAULT 'en';
+
+CREATE TABLE IF NOT EXISTS user_languages (
+    user_id INTEGER PRIMARY KEY,
+    lang TEXT NOT NULL
+);

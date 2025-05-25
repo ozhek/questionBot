@@ -4,3 +4,10 @@ config/*
 
 # Ignore Visual Studio Code settings
 .vscode/
+
+# Ignore compiled binaries
+bin/*
+!bin/.gitkeep
+
+# Ignore Makefile (sorry I dont want to share it)
+Makefile
