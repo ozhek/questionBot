@@ -1,3 +1,11 @@
 bot_token: "{your_bot_token}"
 database:
-  connection_string: "file:{path_to_file}"
+  host: localhost
+  port: "5432"
+  user: postgres
+  password: postgres
+  name: qabot
+  sslmode: disable
+  max_conns: 20
+  min_conns: 5
+  max_conn_lifetime_minutes: 30
