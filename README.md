@@ -1,13 +1,14 @@
 # qaBot
 
-qaBot is a Telegram bot built using Go (Golang) that provides a question and answer service. The bot allows users to ask predefined questions and receive corresponding answers. It also supports subquestions, enabling a more interactive experience.
+qaBot is a Telegram bot built using Go (Golang) that provides a question and answer service. It is designed for high-concurrency environments and uses PostgreSQL as a backend. Users can explore predefined questions and subquestions interactively.
 
 ## Features
 
 - List of predefined questions and answers.
-- Support for subquestions.
+- Support for hierarchical subquestions.
 - Easy configuration using YAML files.
-- SQLite database for storing questions and answers.
+- PostgreSQL database for storing questions and answers.
+- Support for multiple concurrent users.
 
 ## Project Structure
 
@@ -20,16 +21,16 @@ qaBot
 ├── internal
 │   ├── infrastructure
 │   │   └── database
-│   │       └── sqlite.go     # SQLite database connection and operations
+│   │       └── pg_repository.go # PostgreSQL database connection and operations
 │   ├── bot
 │       ├── handler.go        # Logic for handling incoming messages
 │       └── routes.go         # Routing for bot commands and messages
 ├── pkg
 │   └── config
-│       ├── config.go         # Configuration structure and access methods
-├── go.mod                     # Module definition and dependencies
-├── go.sum                     # Checksums for module dependencies
-└── README.md                  # Project documentation
+│       └── config.go         # Configuration structure and access methods
+├── go.mod                    # Module definition and dependencies
+├── go.sum                    # Checksums for module dependencies
+└── README.md                 # Project documentation
 ```
 
 ## Installation
@@ -45,11 +46,17 @@ qaBot
    go mod tidy
    ```
 
-3. Configure the bot by editing the `config/config_local.yml` file with your bot token and database connection string.
+3. Set up PostgreSQL:
+   - Ensure PostgreSQL is running locally or in Docker.
+   - Create a database and user.
+   - Run the provided migration script if applicable.
+
+4. Configure the bot:
+   - Edit the `config/config_local.yml` file with your bot token and PostgreSQL connection settings (host, port, user, password, dbname, sslmode, max connections).
 
 ## Usage
 
-To run the bot, use the following command, specifying the configuration file if needed:
+To run the bot with the local configuration file:
 ```
 go run cmd/main.go -config=local
 ```
