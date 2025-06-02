@@ -22,9 +22,10 @@ type BotRepository interface {
 	GetQuestionByID(ctx context.Context, id int) (*Question, error)
 	SetUserLang(ctx context.Context, userID int64, lang string) error
 	GetUserLang(ctx context.Context, userID int64) (string, error)
-	CreateQuestion(ctx context.Context, lang, text, answer string, parentID int) error
+	CreateQuestion(ctx context.Context, lang, text, answer string, parentID int) (int, error)
 	UpdateQuestion(ctx context.Context, id int, text, answer string) error
 	DeleteQuestionByID(ctx context.Context, id int) error
+	UpdateQuestionFile(ctx context.Context, id int, fileType, fileID string) error
 }
 
 type Bot struct {

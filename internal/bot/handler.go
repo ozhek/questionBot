@@ -22,6 +22,9 @@ var (
 
 const (
 	pageSize = 5
+
+	fileTypeDoc   = "doc"
+	fileTypePhoto = "photo"
 )
 
 type Question struct {
@@ -29,6 +32,8 @@ type Question struct {
 	Lang         string     `json:"lang"`
 	Text         string     `json:"text"`
 	Answer       string     `json:"answer"`
+	FileType     string     `json:"file_type"`
+	FileID       string     `json:"file_id"`
 	ParentID     int        `json:"parent_id"`
 	SubQuestions []Question `json:"sub_questions,omitempty"`
 }
@@ -206,9 +211,35 @@ func (b *Bot) HandleQuestionCallback(ctx context.Context, tbot *tgbot.Bot, updat
 
 	keyboard := b.buildQuestionKeyboard(q.SubQuestions, q.ID, 0, pageSize, isAdmin)
 
-	tbot.EditMessageText(ctx, &tgbot.EditMessageTextParams{
-		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
-		MessageID:   update.CallbackQuery.Message.Message.ID,
+	chatID := update.CallbackQuery.Message.Message.Chat.ID
+	msgID := update.CallbackQuery.Message.Message.ID
+
+	// Step 1: Delete old message
+	tbot.DeleteMessage(ctx, &tgbot.DeleteMessageParams{
+		ChatID:    chatID,
+		MessageID: msgID,
+	})
+
+	// Step 2: Send file if available
+	if q.FileType == fileTypeDoc {
+		_, _ = tbot.SendDocument(ctx, &tgbot.SendDocumentParams{
+			ChatID: chatID,
+			Document: &models.InputFileString{
+				Data: q.FileID,
+			},
+		})
+	} else if q.FileType == fileTypePhoto {
+		_, _ = tbot.SendPhoto(ctx, &tgbot.SendPhotoParams{
+			ChatID: chatID,
+			Photo: &models.InputFileString{
+				Data: q.FileID,
+			},
+		})
+	}
+
+	// Step 3: Send question text and answer
+	_, _ = tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:      chatID,
 		Text:        fmt.Sprintf("*%s*\n\n%s", q.Text, q.Answer),
 		ParseMode:   "Markdown",
 		ReplyMarkup: keyboard,
@@ -460,7 +491,14 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 	if update.Message == nil {
 		return
 	}
-
+	// log.Printf("update.Message: %+v\n", update.Message)
+	if update.Message.Document != nil {
+		fmt.Printf("fileSize: %d\n", update.Message.Document.FileSize)
+		fmt.Printf("fileId: %s\n", update.Message.Document.FileID)
+		fmt.Printf("fileName: %s\n", update.Message.Document.FileName)
+		fmt.Printf("uniqID: %s\n", update.Message.Document.FileUniqueID)
+		fmt.Printf("mime: %s\n", update.Message.Document.MimeType)
+	}
 	fmt.Printf("HandleMessageInput received from user %d: %s\n", update.Message.From.ID, update.Message.Text)
 
 	userID := update.Message.From.ID
@@ -468,11 +506,19 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 	b.pendingMutex.RLock()
 	session, ok := b.pendingQuestionEdits[userID]
 	b.pendingMutex.RUnlock()
-	if !ok || update.Message.Text == "" {
+
+	msgText := update.Message.Text
+	if update.Message.Caption != "" {
+		msgText = update.Message.Caption
+	}
+
+	if !ok || msgText == "" {
 		return
 	}
 
-	parts := strings.SplitN(update.Message.Text, "|", 2)
+	fmt.Printf("message %s\n", msgText)
+
+	parts := strings.SplitN(msgText, "|", 2)
 	if len(parts) != 2 {
 		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
@@ -480,6 +526,19 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 		})
 		return
 	}
+
+	var fileID, fileType string
+	if update.Message.Document != nil {
+		fileType = fileTypeDoc
+		fileID = update.Message.Document.FileID
+	} else if len(update.Message.Photo) != 0 {
+		fileType = fileTypePhoto
+		fileID = update.Message.Photo[0].FileID
+	}
+
+	log.Println("FileType: ", fileType)
+	log.Println("FileID: ", fileID)
+
 	questionText := strings.TrimSpace(parts[0])
 	answerText := strings.TrimSpace(parts[1])
 
@@ -493,13 +552,23 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 			})
 			return
 		}
+
+		err = b.repository.UpdateQuestionFile(ctx, *session.EditID, fileType, fileID)
+		if err != nil {
+			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "Failed to update question.",
+			})
+			return
+		}
+
 		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "Question updated successfully.",
 		})
 	} else {
 		// Create new question
-		err := b.repository.CreateQuestion(ctx, session.Lang, questionText, answerText, session.ParentID)
+		qID, err := b.repository.CreateQuestion(ctx, session.Lang, questionText, answerText, session.ParentID)
 		if err != nil {
 			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 				ChatID: update.Message.Chat.ID,
@@ -508,6 +577,18 @@ func (b *Bot) HandleMessageInput(ctx context.Context, tbot *tgbot.Bot, update *m
 			log.Println("failed to create question: ", err)
 			return
 		}
+		log.Println("question: ", qID)
+
+		err = b.repository.UpdateQuestionFile(ctx, qID, fileType, fileID)
+		if err != nil {
+			tbot.SendMessage(ctx, &tgbot.SendMessageParams{
+				ChatID: update.Message.Chat.ID,
+				Text:   "Failed to create question.",
+			})
+			log.Println("failed to create question: ", err)
+			return
+		}
+
 		tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
 			Text:   "Question created successfully.",
