@@ -12,6 +12,11 @@ import (
 func main() {
 	// Retrieve configuration values
 	botToken := config.GetString("bot_token")
+	workers := config.GetInt("workers")
+	if workers <= 0 {
+		log.Fatal("Invalid number of workers specified in configuration")
+		workers = 1 // Default to 1 worker if not specified or invalid
+	}
 
 	pgCfg := database.PostgresConfig{
 		Host:            config.GetString("database.host"),
@@ -29,7 +34,7 @@ func main() {
 	repo := bot.NewRepository(database.GetPostgresDB())
 
 	// Initialize the bot with the database
-	botAPI, err := bot.NewBot(botToken, repo)
+	botAPI, err := bot.NewBot(botToken, repo, workers)
 	if err != nil {
 		log.Fatalf("Error initializing bot: %v", err)
 	}

@@ -37,14 +37,17 @@ type Bot struct {
 }
 
 // NewBot initializes a new Bot instance with the provided token and database.
-func NewBot(token string, repo BotRepository) (*Bot, error) {
+func NewBot(token string, repo BotRepository, workers int) (*Bot, error) {
 	if token == "" {
 		return nil, ErrEmptyToken
 	}
 
 	log.Println("Initializing bot with provided token...")
 
-	bot, err := tgbot.New(token)
+	bot, err := tgbot.New(
+		token,
+		tgbot.WithWorkers(workers),
+	)
 	if err != nil {
 		log.Printf("Failed to create new bot: %v\n", err)
 		return nil, err

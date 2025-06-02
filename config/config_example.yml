@@ -9,3 +9,4 @@ database:
   max_conns: 20
   min_conns: 5
   max_conn_lifetime_minutes: 30
+workers: 10
