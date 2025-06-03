@@ -17,6 +17,7 @@ import (
 var (
 	adminIDs = map[int64]bool{
 		687353891: true,
+		767885674: true,
 	}
 )
 

@@ -22,7 +22,7 @@ func (r *Repository) GetQuestionsByLang(ctx context.Context, lang string) ([]Que
 	questions := []Question{}
 
 	// Fetch top-level questions (parent_id is NULL)
-	rows, err := r.db.Query(ctx, "SELECT id, lang, text, answer, file_type, file_id, parent_id FROM questions WHERE lang = $1", lang)
+	rows, err := r.db.Query(ctx, "SELECT id, lang, text, answer, file_type, file_id, parent_id FROM questions WHERE lang = $1 order by id", lang)
 	if err != nil {
 		log.Println(err)
 		return nil, err
@@ -56,7 +56,7 @@ func (r *Repository) GetQuestionsByLang(ctx context.Context, lang string) ([]Que
 func (r *Repository) GetSubQuestions(ctx context.Context, parentID int) ([]Question, error) {
 	subQuestions := []Question{}
 
-	rows, err := r.db.Query(ctx, "SELECT id, lang, text, answer, file_type, file_id, parent_id FROM questions WHERE parent_id = $1", parentID)
+	rows, err := r.db.Query(ctx, "SELECT id, lang, text, answer, file_type, file_id, parent_id FROM questions WHERE parent_id = $1 order by id", parentID)
 	if err != nil {
 		return nil, err
 	}
