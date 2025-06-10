@@ -30,6 +30,7 @@ func main() {
 		MaxConnLifetime: time.Minute * time.Duration(config.GetInt("database.max_conn_lifetime_minutes")),
 	}
 	database.InitializePostgres(pgCfg)
+	defer database.ClosePostgres()
 
 	repo := bot.NewRepository(database.GetPostgresDB())
 

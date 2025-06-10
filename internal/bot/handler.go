@@ -50,13 +50,30 @@ func (b *Bot) GetStart(ctx context.Context, tbot *tgbot.Bot, update *models.Upda
 		return
 	}
 
-	commands := []string{
-		"/start - Show this help message",
-		"/questions - List available questions",
-		"/language - Set language",
+	lang, err := b.repository.GetUserLang(ctx, update.Message.From.ID)
+	if err != nil || lang == "" {
+		lang = "en"
 	}
 
-	msg := "Available commands:\n" + strings.Join(commands, "\n")
+	commands := map[string][]string{
+		"en": {
+			"Distinguished experts of the Human Rights Committee, here you can find all the texts of the Legal Acts and current statistics on all questions submitted",
+			"Available commands:",
+			"/start - Show this help message",
+			"/questions - List available questions",
+			"/language - Set language",
+		},
+
+		"ru": {
+			"Уважаемые эксперты Комитета по правам человека, здесь вы можете найти все тексты Нормативных Актов и текущую статистику по всем вопросам, которые были направлены",
+			"Доступные команды:",
+			"/start - Показать это сообщение",
+			"/questions - Список доступных вопросов",
+			"/language - Установить язык",
+		},
+	}
+
+	msg := strings.Join(commands[lang], "\n")
 
 	tbot.SendMessage(ctx, &tgbot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
@@ -69,7 +86,7 @@ func (b *Bot) GetQuestions(ctx context.Context, tbot *tgbot.Bot, update *models.
 		return
 	}
 
-	fmt.Printf("GetQuestions called by user %d\n", update.Message.From.ID)
+	fmt.Printf("GetQuestions called by user %d in %d\n", update.Message.From.ID, update.Message.Chat.ID)
 
 	isAdmin := adminIDs[update.Message.From.ID]
 

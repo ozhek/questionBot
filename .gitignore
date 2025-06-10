@@ -11,3 +11,5 @@ bin/*
 
 # Ignore Makefile (sorry I dont want to share it)
 Makefile
+
+cmd/migration/*

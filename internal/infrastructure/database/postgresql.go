@@ -55,3 +55,7 @@ func InitializePostgres(cfg PostgresConfig) {
 func GetPostgresDB() *pgxpool.Pool {
 	return pgdb
 }
+
+func ClosePostgres() {
+	pgdb.Close()
+}
